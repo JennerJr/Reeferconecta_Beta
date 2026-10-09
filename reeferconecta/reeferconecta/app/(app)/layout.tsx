@@ -8,13 +8,6 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  try {
-    const user = await getSessionUser()
-    if (!user) redirect('/login')
-  } catch {
-    redirect('/login')
-  }
-
   return (
     <div className="min-h-screen bg-gray-800">
       <Navbar />

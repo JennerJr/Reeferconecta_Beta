@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useState } from 'react'
 import { employeeRoles, formatRoleLabel, hasRole } from '@/lib/authorization'
 
 type User = {
-  _id?: string
   name: string
   email: string
   role: string
@@ -22,34 +21,7 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  async function loadUser() {
-    setLoading(true)
-    setStatus('Buscando usuário...')
-    try {
-      const response = await fetch('/api/auth/session')
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error)
-      if (data.user) {
-        setUser(data.user)
-        setUserId(data.user._id)
-        setStatus(hasRole(data.user.role, ['enc', 'dev']) || hasRole(data.user.primaryRole, ['enc', 'dev']) ? 'Você pode alterar a foto e o setor.' : 'Apenas a foto pode ser alterada.')
-      } else {
-        setUser(emptyUser)
-        setUserId('')
-        setStatus('Nenhuma sessão ativa. Faça login novamente.')
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Não foi possível buscar o usuário')
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  useEffect(() => {
-    // A carga inicial sincroniza o perfil com a sessão persistida no Redis.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadUser()
-  }, [])
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -159,8 +131,8 @@ export default function ProfilePage() {
       </div>
 
       <form onSubmit={saveUser} className="space-y-5 rounded-lg border border-white/10 bg-gray-900/70 p-4 sm:p-6">
-        <label className="block text-sm text-gray-300">Nome<input readOnly value={user.name} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800/60 px-3 py-3 text-gray-400 outline-none" /></label>
-        <label className="block text-sm text-gray-300">E-mail<input readOnly type="email" value={user.email} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800/60 px-3 py-3 text-gray-400 outline-none" /></label>
+        <label className="block text-sm text-gray-300">Nome<input  value={user.name} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800/60 px-3 py-3 text-gray-400 outline-none" /></label>
+        <label className="block text-sm text-gray-300">E-mail<input  type="email" value={user.email} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800/60 px-3 py-3 text-gray-400 outline-none" /></label>
         { (hasRole(user.role, ['enc', 'dev']) || hasRole(user.primaryRole, ['enc', 'dev'])) ? <label className="block text-sm text-gray-300">Setor<select value={user.role} onChange={(event) => setUser((currentUser) => ({ ...currentUser, role: event.target.value }))} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800 px-3 py-3 text-white outline-none focus:border-cyan-400">{user.primaryRole && <option className="text-black" value={user.primaryRole}>Retornar ao setor primário ({formatRoleLabel(user.primaryRole)})</option>}{employeeRoles.map((role) => <option className="text-black" key={role} value={role}>{formatRoleLabel(role)}</option>)}</select></label> : <label className="block text-sm text-gray-300">Setor<input readOnly value={formatRoleLabel(user.role)} className="mt-2 w-full rounded-md border border-white/10 bg-gray-800/60 px-3 py-3 text-gray-400 outline-none" /></label>}
         <div className="block text-sm text-gray-300">
           Foto do perfil
