@@ -1,46 +1,20 @@
-import getMongoClient, { getMongoCollectionName, getMongoDatabaseName } from "@/lib/mongodb";
+import { localStore, type NotificationDocument as StoredNotification } from "@/lib/local-store";
 import { normalizeSetor } from "@/lib/catalog";
 
-const databaseName = process.env.MONGODB_DATABASE_PECAS || "pecas";
-const collectionName = "notifications";
-const notifiedRoles = ["enc", "almox"];
-const maxNotifications = 100;
-
 export type NotificationType = "report" | "pedido";
+export type NotificationDocument = StoredNotification;
 
-export type NotificationDocument = {
-  message: string;
-  actorName: string;
-  actorRole: string;
-  createdAt: string;
-  readBy: string[];
-  recipientUserIds?: string[];
-  type?: NotificationType;
-};
-
-async function notificationsCollection() {
-  return (await getMongoClient()).db(databaseName).collection<NotificationDocument>(collectionName);
-}
-
-async function pruneOldNotifications() {
-  const collection = await notificationsCollection();
-  const total = await collection.countDocuments();
-  if (total > maxNotifications) {
-    const oldest = await collection
-      .find({}, { projection: { _id: 1 } })
-      .sort({ createdAt: 1 })
-      .limit(total - maxNotifications)
-      .toArray();
-    await collection.deleteMany({ _id: { $in: oldest.map((document) => document._id) } });
-  }
-}
+const notifiedRoles = ["enc", "almox"];
 
 // Avisa ENC e almoxarifado quando um relatório é enviado por outro setor.
 export async function notifyReportSubmitted(actorName: string, actorRole: string, message: string) {
   if (notifiedRoles.includes(actorRole.trim().toLowerCase())) return;
-  const collection = await notificationsCollection();
-  await collection.insertOne({ message, actorName, actorRole, createdAt: new Date().toISOString(), readBy: [], type: "report" });
-  await pruneOldNotifications();
+  localStore.addNotification({
+    message,
+    actorName,
+    actorRole,
+    type: "report",
+  });
 }
 
 // Consolida o envio de vários relatórios de uma vez em uma única notificação.
@@ -50,33 +24,42 @@ export async function notifyBatchReportsSubmitted(actorName: string, actorRole: 
 
 // Avisa ENC e almoxarifado quando um novo pedido de peças é criado.
 export async function notifyPedidoCreated(actorName: string, actorRole: string, message: string) {
-  const collection = await notificationsCollection();
-  await collection.insertOne({ message, actorName, actorRole, createdAt: new Date().toISOString(), readBy: [], type: "pedido" });
-  await pruneOldNotifications();
-}
-
-export async function notifyUser(userId: string, message: string, actorName: string, actorRole: string, type?: NotificationType) {
-  const collection = await notificationsCollection();
-  await collection.insertOne({
+  localStore.addNotification({
     message,
     actorName,
     actorRole,
-    createdAt: new Date().toISOString(),
-    readBy: [],
-    recipientUserIds: [userId],
-    type,
+    type: "pedido",
   });
-  await pruneOldNotifications();
+}
+
+export async function notifyUser(
+  userId: string,
+  message: string,
+  actorName: string,
+  actorRole: string,
+  type?: NotificationType,
+) {
+  localStore.addNotification({
+    message,
+    actorName,
+    actorRole,
+    type,
+    recipientUserIds: [userId],
+  });
 }
 
 // Avisa individualmente cada pessoa do setor informado quando um pedido é criado para esse setor.
-export async function notifySectorUsers(setor: string, message: string, actorName: string, actorRole: string, excludeUserId?: string) {
-  const client = await getMongoClient();
-  const usersCollection = client.db(getMongoDatabaseName()).collection(getMongoCollectionName());
-  const users = await usersCollection.find({}, { projection: { _id: 1, role: 1 } }).toArray();
+export async function notifySectorUsers(
+  setor: string,
+  message: string,
+  actorName: string,
+  actorRole: string,
+  excludeUserId?: string,
+) {
+  const users = localStore.getUsers();
   const recipientIds = users
-    .filter((candidate) => normalizeSetor(String(candidate.role)) === setor && candidate._id.toString() !== excludeUserId)
-    .map((candidate) => candidate._id.toString());
+    .filter((candidate) => normalizeSetor(String(candidate.role)) === setor && candidate._id !== excludeUserId)
+    .map((candidate) => candidate._id);
 
   await Promise.all(recipientIds.map((userId) => notifyUser(userId, message, actorName, actorRole, "pedido")));
 }

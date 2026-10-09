@@ -52,7 +52,8 @@ const userNavigation = [
   { name: 'Meu perfil', href: '/profile' },
   { name: 'Times', href: '/times' },
   { name: 'Ver peças cadastradas', href: '/pecas/catalogo' },
-  { name: 'Sair', href: '/login' }
+  { name: 'Restaurar dados demo', href: '#reset' },
+  { name: 'Reiniciar sessão demo', href: '#logout' },
 ]
 
 function classNames(...classes: (string | boolean | undefined)[]) {
@@ -73,14 +74,25 @@ export default function Navbar() {
   const isActive = (href: string) => href !== '#' && (pathname === href || pathname.startsWith(`${href}/`))
   const pedidosUnreadCount = notifications.filter((notification) => !notification.read && notification.type === 'pedido').length
 
-  async function handleLogout() {
+  async function handleResetDemo() {
+    if (!window.confirm('Deseja restaurar todos os dados da demonstração (peças, relatórios, chamados e pedidos)?')) return
     try {
-      const response = await fetch('/api/auth/logout', { method: 'POST' })
-      if (!response.ok) throw new Error('Não foi possível encerrar a sessão')
+      await fetch('/api/demo/reset', { method: 'POST' })
       setProfileMenuOpen(false)
       setMobileMenuOpen(false)
-      router.replace('/login')
-      router.refresh()
+      window.location.reload()
+    } catch (error) {
+      console.error('[Navbar] reset demo failed', error)
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      setProfileMenuOpen(false)
+      setMobileMenuOpen(false)
+      router.push('/dashboard')
+      window.location.reload()
     } catch (error) {
       console.error('[Navbar] logout failed', error)
     }
@@ -253,12 +265,21 @@ export default function Navbar() {
 
                 {profileMenuOpen && (
                   <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-gray-800 py-1 outline-1 -outline-offset-1 outline-white/10">
-                    {userNavigation.map((item) => item.name === 'Sair' ? (
+                    {userNavigation.map((item) => item.href === '#logout' ? (
                       <button
                         key={item.name}
                         type="button"
                         onClick={() => void handleLogout()}
-                        className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:outline-hidden"
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:outline-hidden"
+                      >
+                        {item.name}
+                      </button>
+                    ) : item.href === '#reset' ? (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => void handleResetDemo()}
+                        className="block w-full text-left px-4 py-2 text-sm text-amber-300 hover:bg-white/5 hover:outline-hidden"
                       >
                         {item.name}
                       </button>
@@ -341,12 +362,21 @@ export default function Navbar() {
             </div>
             {notificationsOpen && <div className="relative">{notificationsPanel}</div>}
             <div className="mt-3 space-y-1 px-2">
-              {userNavigation.map((item) => item.name === 'Sair' ? (
+              {userNavigation.map((item) => item.href === '#logout' ? (
                 <button
                   key={item.name}
                   type="button"
                   onClick={() => void handleLogout()}
-                  className="block rounded-md px-3 py-2 text-base font-medium text-gray-400 hover:bg-white/5 hover:text-white"
+                  className="block w-full text-left rounded-md px-3 py-2 text-base font-medium text-gray-400 hover:bg-white/5 hover:text-white"
+                >
+                  {item.name}
+                </button>
+              ) : item.href === '#reset' ? (
+                <button
+                  key={item.name}
+                  type="button"
+                  onClick={() => void handleResetDemo()}
+                  className="block w-full text-left rounded-md px-3 py-2 text-base font-medium text-amber-300 hover:bg-white/5 hover:text-amber-200"
                 >
                   {item.name}
                 </button>

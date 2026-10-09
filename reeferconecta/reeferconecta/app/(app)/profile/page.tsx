@@ -20,7 +20,17 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user) {
+          setUser(data.user)
+          setUserId(data.user._id)
+        }
+      })
+      .catch(() => undefined)
+  }, [])
 
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {

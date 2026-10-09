@@ -1,4 +1,4 @@
-import getMongoClient, { getMongoCollectionName, getMongoDatabaseName } from "@/lib/mongodb";
+import { localStore } from "@/lib/local-store";
 import { employeeRoles, formatRoleLabel } from "@/lib/authorization";
 import { getSessionUser } from "@/lib/auth-session";
 import DashboardFilters from "./dashboard-filters";
@@ -13,8 +13,6 @@ type Piece = { id?: number; nome?: string; situacaoAtual?: string; reports?: Rep
 type User = { name?: string; role?: string };
 type RecentOkReport = { id: string; pieceName: string; responsibleName: string; createdAt: string };
 
-const piecesDatabase = process.env.MONGODB_DATABASE_PECAS || "pecas";
-const reportsDataBase = process.env.MONGODB_DATABASE_REPORTS || "reports";
 const encFilterableSectors = ["lab.elétrica", "lab.eletronica", "cereco"] as const;
 const masterFilterableSectors = ["enc"] as const;
 const periods = ["all", "1-month", "3-months", "6-months", "1-year", "custom"] as const;
@@ -44,20 +42,11 @@ function getPeriodRange(period: string, startDate: string, endDate: string) {
 }
 
 async function getDashboardData(filters: { sector: string; employee: string; period: string; startDate: string; endDate: string }) {
-  const client = await getMongoClient();
   const sessionUser = await getSessionUser();
   if (!sessionUser) throw new Error("Sessão não encontrada");
-  const [pieces, users, reports] = await Promise.all([
-    client.db(piecesDatabase).collection<Piece>("pecasdb").find({}, { projection: { id: 1, nome: 1, situacaoAtual: 1, reports: 1 } }).toArray(),
-    client.db(getMongoDatabaseName()).collection<User>(getMongoCollectionName()).find({}, { projection: { name: 1, role: 1 } }).toArray(),
-    client.db(reportsDataBase).collection<ExternalReport>("reportsdb").find({}, { projection: { responsavelReparo: 1, situacaoAtual: 1, createdAt: 1, nomePeca: 1, pieceId: 1 } }).toArray(),
-  ]);
-  // Relatórios embutidos em pecasdb (piece.reports) já passaram por QC.
-  // Relatórios da coleção reportsdb são "sem QC" — como não passaram por essa
-  // checagem, cada um deles é tratado como uma peça individual na contagem,
-  // em vez de ser mesclado à peça oficial correspondente. Isso evita que
-  // vários relatórios sem QC de peças diferentes sejam agrupados como se
-  // fossem uma única peça (o que distorcia o total exibido no relatório).
+
+  const { pieces, users, reports } = localStore.getDashboardCollections();
+
   const pieceNameById = new Map<number, string>();
   for (const piece of pieces) {
     if (piece.id !== undefined && piece.nome) pieceNameById.set(piece.id, piece.nome);
@@ -70,7 +59,7 @@ async function getDashboardData(filters: { sector: string; employee: string; per
       reports: [externalReport],
     })),
   ];
-  const roleByName = new Map(users.filter((user) => user.name && user.role).map((user) => [user.name!.trim().toLowerCase(), user.role!.trim().toLowerCase()]));
+  const roleByName = new Map(users.filter((user) => user.name && user.role).map((user) => [user.name.trim().toLowerCase(), user.role.trim().toLowerCase()]));
   const sessionRole = sessionUser.role.trim().toLowerCase();
   const canViewAllDashboard = sessionRole === "enc" || sessionRole === "dev" || sessionRole === "master";
   const currentUserName = sessionUser.name.trim().toLowerCase();

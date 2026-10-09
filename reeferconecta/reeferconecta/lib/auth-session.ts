@@ -1,8 +1,6 @@
-import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { getRedisClient } from "@/lib/redis";
+import { localStore, type UserDocument } from "@/lib/local-store";
 
-const sessionTtlSeconds = 60 * 60 * 24 * 7;
 const sessionCookie = "reeferconecta_session";
 
 export type AuthUser = {
@@ -15,44 +13,82 @@ export type AuthUser = {
 };
 
 export async function createSession(user: AuthUser) {
-  const sessionId = randomBytes(32).toString("hex");
-  const redis = await getRedisClient();
-  await redis.set(`session:${sessionId}`, JSON.stringify(user), { EX: sessionTtlSeconds });
+  const sessionId = `session-${user._id}-${Date.now()}`;
+  localStore.setSession(sessionId, {
+    ...user,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
   const cookieStore = await cookies();
   cookieStore.set(sessionCookie, sessionId, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: sessionTtlSeconds,
+    maxAge: 60 * 60 * 24 * 7,
     path: "/",
   });
 }
 
-export async function getSessionUser() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(sessionCookie)?.value;
-  if (!sessionId) return null;
-  const redis = await getRedisClient();
-  const value = await redis.get(`session:${sessionId}`);
-  if (!value) return null;
-  await redis.expire(`session:${sessionId}`, sessionTtlSeconds);
-  return JSON.parse(value) as AuthUser;
+export async function getSessionUser(): Promise<AuthUser | null> {
+  try {
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get(sessionCookie)?.value;
+    if (sessionId) {
+      const user = localStore.getSession(sessionId);
+      if (user) {
+        return {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          primaryRole: user.primaryRole,
+          imageUrl: user.imageUrl,
+        };
+      }
+    }
+  } catch {
+    // Falha silenciosa em contextos estáticos
+  }
+
+  // Fallback demo user — SemLogin: sempre retorna o usuário demo administrativo se não houver cookie
+  const defaultUser = localStore.getDefaultUser();
+  return {
+    _id: defaultUser._id,
+    name: defaultUser.name,
+    email: defaultUser.email,
+    role: defaultUser.role,
+    primaryRole: defaultUser.primaryRole,
+    imageUrl: defaultUser.imageUrl,
+  };
 }
 
 export async function updateSessionUser(user: AuthUser) {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(sessionCookie)?.value;
-  if (!sessionId) return;
-  const redis = await getRedisClient();
-  await redis.set(`session:${sessionId}`, JSON.stringify(user), { EX: sessionTtlSeconds });
+  try {
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get(sessionCookie)?.value;
+    if (sessionId) {
+      localStore.setSession(sessionId, {
+        ...user,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    localStore.updateUser(user._id, user);
+  } catch {
+    // Ignore
+  }
 }
 
 export async function destroySession() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(sessionCookie)?.value;
-  if (sessionId) {
-    const redis = await getRedisClient();
-    await redis.del(`session:${sessionId}`);
+  try {
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get(sessionCookie)?.value;
+    if (sessionId) {
+      localStore.deleteSession(sessionId);
+    }
+    cookieStore.delete(sessionCookie);
+  } catch {
+    // Ignore
   }
-  cookieStore.delete(sessionCookie);
 }

@@ -1,0 +1,10 @@
+{
+  "name": "reeferconecta-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix reeferconecta/reeferconecta run dev",
+    "build": "npm --prefix reeferconecta/reeferconecta run build",
+    "start": "npm --prefix reeferconecta/reeferconecta run start"
+  }
+}
